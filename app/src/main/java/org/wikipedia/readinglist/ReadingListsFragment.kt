@@ -536,6 +536,7 @@ class ReadingListsFragment : Fragment(), SortReadingListsDialog.Callback, Readin
         }
 
         override fun onDelete(readingList: ReadingList) {
+            if(readingList.isDefault) return
             ReadingListBehaviorsUtil.deleteReadingList(requireActivity(), readingList, true) {
                 ReadingListBehaviorsUtil.showDeleteListUndoSnackbar(requireActivity(), readingList) { updateLists() }
                 updateLists()
@@ -661,7 +662,8 @@ class ReadingListsFragment : Fragment(), SortReadingListsDialog.Callback, Readin
 
         override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
             val listsSelected = selectedLists
-            val onlyDefaultSelected = listsSelected.size == 1 && listsSelected[0].isDefault
+            //logic for all articles list too
+            val onlyDefaultOrAllArticlesSelected = listsSelected.size == 1 && listsSelected.any {it.isDefault}
             mode.title = if (listsSelected.isEmpty()) "" else getString(R.string.multi_select_items_selected, listsSelected.size)
             val fullOpacity = 255
             val halfOpacity = 80
@@ -674,9 +676,9 @@ class ReadingListsFragment : Fragment(), SortReadingListsDialog.Callback, Readin
                     append(exportItem.title)
                 }
             }
-            deleteItem.icon?.alpha = if (listsSelected.isEmpty() || onlyDefaultSelected) halfOpacity else fullOpacity
+            deleteItem.icon?.alpha = if (listsSelected.isEmpty() || onlyDefaultOrAllArticlesSelected) halfOpacity else fullOpacity
             exportItem.isEnabled = listsSelected.isNotEmpty()
-            deleteItem.isEnabled = listsSelected.isNotEmpty() && !onlyDefaultSelected
+            deleteItem.isEnabled = listsSelected.isNotEmpty() && !onlyDefaultOrAllArticlesSelected
 
             val selectButton = menu.findItem(R.id.menu_select)
             selectButton.setIcon(when {

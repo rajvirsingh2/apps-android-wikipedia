@@ -26,6 +26,7 @@ import org.wikipedia.readinglist.database.ReadingListPage
 import org.wikipedia.settings.Prefs
 import org.wikipedia.util.DeviceUtil
 import org.wikipedia.util.FeedbackUtil
+import org.wikipedia.util.L10nUtil
 import org.wikipedia.util.StringUtil
 import org.wikipedia.util.log.L
 import org.wikipedia.views.CircularProgressBar.Companion.MIN_PROGRESS
@@ -450,7 +451,14 @@ object ReadingListBehaviorsUtil {
 
     fun searchListsAndPages(coroutineScope: CoroutineScope, searchQuery: String?, callback: SearchCallback) {
         coroutineScope.launch(exceptionHandler) {
-            allReadingLists = AppDatabase.instance.readingListDao().getAllLists()
+            val dbLists = AppDatabase.instance.readingListDao().getAllLists()
+            val unique = AppDatabase.instance.readingListPageDao().getAllUniquePages()
+
+            val defaultList = dbLists.firstOrNull{it.isDefault}
+            defaultList?.pages?.clear()
+            defaultList?.pages?.addAll(unique)
+            val customList = dbLists.filterNot {it.isDefault}
+            allReadingLists = listOfNotNull(defaultList)+customList
             val list = withContext(Dispatchers.IO) { applySearchQuery(searchQuery, allReadingLists) }
             if (searchQuery.isNullOrEmpty()) {
                 ReadingList.sortGenericList(list, Prefs.getReadingListSortMode(ReadingList.SORT_BY_NAME_ASC))

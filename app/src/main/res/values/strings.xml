@@ -693,6 +693,9 @@
     <string name="reading_lists_preview_save_dialog_save">Save</string>
     <string name="reading_lists_preview_saved_snackbar">Reading list saved</string>
     <string name="reading_lists_preview_saved_snackbar_action">View</string>
+    <string name="reading_list_remove_from_all_lists_title">Remove from all lists?</string>
+    <string name="reading_list_remove_from_all_lists_message">\"%1$s\" will be removed from all of your saved reading lists.</string>
+    <string name="reading_list_remove_from_all_lists_button">Remove</string>
     <!-- /Reading lists -->
 
     <!-- User options -->

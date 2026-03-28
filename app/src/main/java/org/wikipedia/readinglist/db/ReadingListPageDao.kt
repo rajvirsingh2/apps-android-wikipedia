@@ -101,6 +101,10 @@ interface ReadingListPageDao {
     @Query("SELECT * FROM ReadingListPage WHERE atime > 0 ORDER BY atime DESC LIMIT :limit OFFSET :offset")
     suspend fun getPagesByLocallySavedTime(limit: Int, offset: Int): List<ReadingListPage>
 
+    //Query for all articles
+    @Query("SELECT * FROM ReadingListPage WHERE status != :excludedStatus GROUP BY lang, apiTitle")
+    suspend fun getAllUniquePages(excludedStatus: Long = ReadingListPage.STATUS_QUEUE_FOR_DELETE): List<ReadingListPage>
+
     suspend fun getAllPagesToBeSaved() = getPagesByStatus(ReadingListPage.STATUS_QUEUE_FOR_SAVE, true)
 
     suspend fun getAllPagesToBeForcedSave() = getPagesByStatus(ReadingListPage.STATUS_QUEUE_FOR_FORCED_SAVE, true)

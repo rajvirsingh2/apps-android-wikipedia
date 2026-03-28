@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.AppBarLayout.OnOffsetChangedListener
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -44,6 +45,7 @@ import org.wikipedia.activity.BaseActivity
 import org.wikipedia.analytics.eventplatform.ReadingListsAnalyticsHelper
 import org.wikipedia.analytics.eventplatform.RecommendedReadingListEvent
 import org.wikipedia.concurrency.FlowEventBus
+import org.wikipedia.database.AppDatabase
 import org.wikipedia.databinding.FragmentReadingListBinding
 import org.wikipedia.events.NewRecommendedReadingListEvent
 import org.wikipedia.events.PageDownloadEvent
@@ -58,6 +60,7 @@ import org.wikipedia.readinglist.database.ReadingList
 import org.wikipedia.readinglist.database.ReadingListPage
 import org.wikipedia.readinglist.recommended.RecommendedReadingListNotificationManager
 import org.wikipedia.readinglist.recommended.RecommendedReadingListSettingsActivity
+import org.wikipedia.readinglist.sync.ReadingListSyncAdapter
 import org.wikipedia.readinglist.sync.ReadingListSyncEvent
 import org.wikipedia.settings.Prefs
 import org.wikipedia.settings.RemoteConfig
@@ -147,6 +150,12 @@ class ReadingListFragment : Fragment(), MenuProvider, ReadingListItemActionsDial
                             is Resource.Success -> {
                                 binding.readingListSwipeRefresh.isRefreshing = false
                                 readingList = resource.data
+                                //save in default list
+                                if(readingList?.isDefault==true){
+                                    val uniquePages = AppDatabase.instance.readingListPageDao().getAllUniquePages()
+                                    readingList?.pages?.clear()
+                                    readingList?.pages?.addAll(uniquePages)
+                                }
                                 readingList?.let {
                                     binding.searchEmptyView.setEmptyText(getString(R.string.search_reading_list_no_results, it.title))
                                 }
@@ -496,7 +505,6 @@ class ReadingListFragment : Fragment(), MenuProvider, ReadingListItemActionsDial
             }
         }
     }
-
     private fun updateReadingListData() {
         when (readingListMode) {
             ReadingListMode.DEFAULT -> viewModel.updateListById(readingListId)
@@ -874,7 +882,7 @@ class ReadingListFragment : Fragment(), MenuProvider, ReadingListItemActionsDial
             if (isRecommendedList) {
                 PageAvailableOfflineHandler.checkHistory(viewLifecycleOwner.lifecycleScope, pageTitle) { view.setViewsRead(it) }
             }
-            if (!currentSearchQuery.isNullOrEmpty()) {
+            if (!currentSearchQuery.isNullOrEmpty() || readingList?.isDefault==true) {
                 view.setTitleMaxLines(2)
                 view.setTitleEllipsis()
                 view.setDescriptionMaxLines(2)
@@ -890,9 +898,46 @@ class ReadingListFragment : Fragment(), MenuProvider, ReadingListItemActionsDial
                 ReadingListMode.DEFAULT -> {
                     readingList?.let {
                         if (currentSearchQuery.isNullOrEmpty()) {
-                            ReadingListBehaviorsUtil.deletePages(requireActivity(), listOf(it), page, { updateReadingListData() }, {
-                                update()
-                            })
+                            //action if chosen list of all articles
+                            if(it.isDefault){
+                                val dbInstance=AppDatabase.instance.readingListPageDao()
+                                MaterialAlertDialogBuilder(requireActivity())
+                                    .setTitle(R.string.reading_list_remove_from_all_lists_title)
+                                    .setMessage(getString(R.string.reading_list_remove_from_all_lists_message,page.displayTitle))
+                                    .setPositiveButton(R.string.reading_list_remove_from_all_lists_button){_,_ ->
+                                        viewLifecycleOwner.lifecycleScope.launch(CoroutineExceptionHandler{_, exception ->
+                                            L.w(exception)
+                                        }){
+                                            val pageTitle = ReadingListPage.toPageTitle(page)
+                                            val occurrences = dbInstance.getAllPageOccurrences(pageTitle)
+                                            val lists = AppDatabase.instance.readingListDao().getListsFromPageOccurrences(occurrences)
+                                            //Loop and delete from every list it exists
+                                            occurrences.forEach { occurrence->
+                                                lists.find { list->
+                                                    list.id==occurrence.listId
+                                                }?.let { list->
+                                                    //queuing for sync
+                                                    dbInstance.markPagesForDeletion(list,listOf(occurrence),false)
+                                                }
+                                            }
+                                            //Single sync
+                                            ReadingListSyncAdapter.manualSync()
+                                            updateReadingListData()
+                                            update()
+                                        }
+                                    }
+                                    .setNegativeButton(R.string.reading_list_remove_from_offline_cancel_button_text){_,_ ->
+                                        adapter.notifyItemChanged(bindingAdapterPosition)
+                                    }
+                                    .setOnCancelListener {
+                                        adapter.notifyItemChanged(bindingAdapterPosition)
+                                    }
+                                    .show()
+                            }else{
+                                ReadingListBehaviorsUtil.deletePages(requireActivity(), listOf(it), page, { updateReadingListData() }, {
+                                    update()
+                                })
+                            }
                         }
                     }
                 }
